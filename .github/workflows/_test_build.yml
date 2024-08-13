@@ -7,16 +7,6 @@ on:
         required: false
         type: string
         default: ${{ github.sha }}
-      TEST_LEXOFFICE_API_URL:
-        required: false
-        type: string
-    secrets:
-      TEST_ECWID_SHOP_ID:
-        required: true
-      TEST_ECWID_TOKEN:
-        required: true
-      TEST_LEXOFFICE_API_KEY:
-        required: true
 
 jobs:
   lint:

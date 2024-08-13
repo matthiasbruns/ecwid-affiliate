@@ -11,8 +11,6 @@ concurrency:
 jobs:
   build:
     uses: ./.github/workflows/_test_build.yml
-    with:
-      stage: dev
     secrets: inherit
 
   build-web:
