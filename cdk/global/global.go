@@ -2,6 +2,7 @@ package global
 
 import (
 	"fmt"
+
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awscertificatemanager"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awscloudfront"
@@ -48,10 +49,10 @@ func Stack(scope constructs.Construct, id string, props *StackProps) (awscdk.Sta
 			Zone:       hostedZone,
 			RecordName: jsii.String("dev"),
 			Values: &[]*string{
-				jsii.String("ns-1635.awsdns-12.co.uk."),
-				jsii.String("ns-674.awsdns-20.net."),
-				jsii.String("ns-400.awsdns-50.com."),
-				jsii.String("ns-1116.awsdns-11.org."),
+				jsii.String("ns-835.awsdns-40.net."),
+				jsii.String("ns-1795.awsdns-32.co.uk."),
+				jsii.String("ns-1236.awsdns-26.org."),
+				jsii.String("ns-277.awsdns-34.com."),
 			},
 		})
 
