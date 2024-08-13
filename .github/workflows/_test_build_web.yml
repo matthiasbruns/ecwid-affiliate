@@ -38,7 +38,7 @@ jobs:
         working-directory: ./web
 
       - name: Archive web build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: web-build
           retention-days: 1
