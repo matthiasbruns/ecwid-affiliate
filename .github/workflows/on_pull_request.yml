@@ -1,0 +1,64 @@
+name: Verify PR
+
+on:
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/_test_build.yml
+    with:
+      stage: dev
+    secrets: inherit
+
+  build-web:
+    uses: ./.github/workflows/_test_build_web.yml
+    with:
+      stage: dev
+    secrets: inherit
+
+  validate-terraform:
+    uses: ./.github/workflows/_terraform_validate_deploy.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      stage: dev
+    secrets: inherit
+
+  cdk-diff:
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    environment: dev
+    needs:
+      - build
+      - build-web
+      - validate-terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download web-build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: web-build
+          path: web/build
+
+      - name: Download go-build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: go-build
+          path: build
+
+      - name: cdk diff
+        uses: youyo/aws-cdk-github-actions@v2
+        with:
+          cdk_subcommand: 'diff'
+          actions_comment: true
+          working_dir: 'cdk'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGE: dev

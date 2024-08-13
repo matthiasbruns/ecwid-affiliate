@@ -1,0 +1,114 @@
+name: Deploy main branch
+
+on:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: "dev-deploy"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/_test_build.yml
+    secrets: inherit
+
+  build-web:
+    uses: ./.github/workflows/_test_build_web.yml
+    with:
+      stage: dev
+    secrets: inherit
+
+  validate-terraform:
+    uses: ./.github/workflows/_terraform_validate_deploy.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      STAGE: dev
+      TF_APPLY: true
+    secrets: inherit
+
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    environment: dev
+    strategy:
+      matrix:
+        region: [ "eu-central-1" ]
+    env:
+      AWS_REGION: ${{ matrix.region }}
+    needs:
+      - build
+      - build-web
+      - validate-terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download web-build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: web-build
+          path: web/build
+
+      - name: Download go-build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: go-build
+          path: build
+
+      - name: cdk synth
+        uses: youyo/aws-cdk-github-actions@v2
+        with:
+          cdk_subcommand: 'synth'
+          actions_comment: true
+          working_dir: 'cdk'
+        env:
+          AWS_DEFAULT_REGION: ${{ matrix.region }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGE: dev
+
+      - name: cdk diff
+        uses: youyo/aws-cdk-github-actions@v2
+        with:
+          cdk_subcommand: 'diff'
+          actions_comment: true
+          working_dir: 'cdk'
+        env:
+          AWS_DEFAULT_REGION: ${{ matrix.region }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGE: dev
+
+      - name: cdk deploy
+        uses: youyo/aws-cdk-github-actions@v2
+        with:
+          cdk_subcommand: 'deploy'
+          actions_comment: true
+          working_dir: 'cdk'
+          cdk_args: '--require-approval never'
+        env:
+          AWS_DEFAULT_REGION: ${{ matrix.region }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGE: dev
+
+  clear-cache:
+    needs: "deploy"
+    name: Invalidate CloudFront
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        region: [ "eu-central-1" ]
+    env:
+      AWS_REGION: ${{ matrix.region }}
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ matrix.region }}
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"

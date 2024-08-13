@@ -1,0 +1,196 @@
+version: '3'
+
+tasks:
+  clean:
+    cmds:
+      - rm -rf ./.task
+      - rm -rf ./build
+      - rm -rf ./gen
+
+  install:
+    cmds:
+      - task: install:root
+      - task: install:web
+
+  install:root:
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - go mod download
+
+  install:web:
+    cmds:
+      - cd web && npm install
+
+  create-cert:
+    cmds:
+      - mkdir -p .certs
+      - openssl req -x509 -newkey rsa:4096 -keyout .certs/key.pem -out .certs/cert.pem -days 365 -nodes -subj '/CN=localhost'
+
+  generate:
+    cmds:
+      - go generate ./...
+
+  version:prod:
+    cmds:
+      - cd cmd && git describe --tags --abbrev=0 > version.txt
+
+  lint:
+    deps: [ generate ]
+    cmds:
+      - go vet cmd/standalone/main.go
+      - golangci-lint run
+
+  test:
+    deps: [ generate ]
+    cmds:
+      - go test -cover -coverprofile=coverage.out -race ./...
+      - go tool cover -html coverage.out -o coverage.html
+
+  dev:
+    deps: [ generate ]
+    cmds:
+      - task: dev:standalone
+      - task: dev:web
+
+  dev:standalone:
+    deps: [ generate ]
+    cmds:
+      - go run cmd/standalone/main.go
+
+  dev:web:
+    deps: [ generate ]
+    cmds:
+      - cd web && npm start
+
+  build:
+    deps: [ generate ]
+    cmds:
+      - task: build:standalone
+      - task: build:lambdas
+
+  build:standalone:
+    cmds:
+      - go build -o build/dev cmd/standalone/main.go
+
+  build:lambdas:
+    cmds:
+      - task: build:lambdas:billing:invoice_sync_stream
+      - task: build:lambdas:billing:subscription
+      - task: build:lambdas:inbox:get
+      - task: build:lambdas:inbox:invoice_sync_stream
+      - task: build:lambdas:inbox:messages:update
+      - task: build:lambdas:lexoffice:auth:init
+      - task: build:lambdas:lexoffice:auth:code
+      - task: build:lambdas:lexoffice:auth:refresh
+      - task: build:lambdas:lexoffice:webhook
+      - task: build:lambdas:invoices
+      - task: build:lambdas:orders:invoice
+      - task: build:lambdas:orders:invoice:batchSynchronize
+      - task: build:lambdas:orders:invoice:enqueueBatchSynchronize
+      - task: build:lambdas:orders:invoice:synchronize
+      - task: build:lambdas:settings
+      - task: build:lambdas:settings:access_token
+      - task: build:lambdas:settings:invoice_sync_enabled
+      - task: build:lambdas:settings:lexoffice:api_key
+      - task: build:lambdas:settings:lexoffice:revoke
+      - task: build:lambdas:settings:settings_stream
+      - task: build:lambdas:settings:sync_tax_settings
+      - task: build:lambdas:settings:use_collection_contact
+      - task: build:lambdas:webhook
+      - task: build:lambdas:sqssync
+
+  build:lambdas:billing:invoice_sync_stream:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/billing/invoice_sync_stream/bootstrap cmd/lambda/billing/invoice_sync_stream/main.go
+    - zip -j build/billing_invoicesyncstream.zip build/lambda/billing/invoice_sync_stream/bootstrap
+
+  build:lambdas:billing:subscription:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/billing/subscription/bootstrap cmd/lambda/billing/subscription/main.go
+    - zip -j build/billing_subscription.zip build/lambda/billing/subscription/bootstrap
+    
+  build:lambdas:inbox:get:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/inbox/get/bootstrap cmd/lambda/inbox/get/main.go
+    - zip -j build/inbox_get.zip build/lambda/inbox/get/bootstrap
+
+  build:lambdas:inbox:invoice_sync_stream:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/inbox/invoice_sync_stream/bootstrap cmd/lambda/inbox/invoice_sync_stream/main.go
+    - zip -j build/inbox_invoicesyncstream.zip build/lambda/inbox/invoice_sync_stream/bootstrap
+
+  build:lambdas:inbox:messages:update:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/inbox/messages/update/bootstrap cmd/lambda/inbox/messages/update/main.go
+    - zip -j build/inbox_message_update.zip build/lambda/inbox/messages/update/bootstrap
+
+  build:lambdas:lexoffice:auth:init:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/lexoffice/auth/init/bootstrap cmd/lambda/lexoffice/auth/init/main.go
+    - zip -j build/lexoffice_auth_init.zip build/lambda/lexoffice/auth/init/bootstrap
+
+  build:lambdas:lexoffice:auth:code:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/lexoffice/auth/code/bootstrap cmd/lambda/lexoffice/auth/code/main.go
+    - zip -j build/lexoffice_auth_code.zip build/lambda/lexoffice/auth/code/bootstrap
+
+  build:lambdas:lexoffice:auth:refresh:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/lexoffice/auth/refresh/bootstrap cmd/lambda/lexoffice/auth/refresh/main.go
+    - zip -j build/lexoffice_auth_refresh.zip build/lambda/lexoffice/auth/refresh/bootstrap
+
+  build:lambdas:lexoffice:webhook:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/lexoffice/webhook/bootstrap cmd/lambda/lexoffice/webhook/main.go
+    - zip -j build/lexoffice_webhook.zip build/lambda/lexoffice/webhook/bootstrap
+
+  build:lambdas:invoices:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/invoices/bootstrap cmd/lambda/invoices/main.go
+    - zip -j build/invoices.zip build/lambda/invoices/bootstrap
+
+  build:lambdas:orders:invoice:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/orders/invoice/bootstrap cmd/lambda/orders/invoice/main.go
+    - zip -j build/orders_invoice.zip build/lambda/orders/invoice/bootstrap
+
+  build:lambdas:orders:invoice:synchronize:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/orders/invoice/synchronize/bootstrap cmd/lambda/orders/invoice/synchronize/main.go
+    - zip -j build/invoice_synchronize.zip build/lambda/orders/invoice/synchronize/bootstrap
+
+  build:lambdas:orders:invoice:batchSynchronize:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/orders/invoice/batchSynchronize/bootstrap cmd/lambda/orders/invoice/batchSynchronize/main.go
+    - zip -j build/batch_synchronize.zip build/lambda/orders/invoice/batchSynchronize/bootstrap
+
+  build:lambdas:orders:invoice:enqueueBatchSynchronize:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/orders/invoice/enqueueBatchSynchronize/bootstrap cmd/lambda/orders/invoice/enqueueBatchSynchronize/main.go
+    - zip -j build/enqueue_batch_synchronize.zip build/lambda/orders/invoice/enqueueBatchSynchronize/bootstrap
+
+  build:lambdas:settings:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/settings/bootstrap cmd/lambda/settings/main.go
+    - zip -j build/settings.zip build/lambda/settings/bootstrap
+
+  build:lambdas:settings:access_token:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/settings/access_token/bootstrap cmd/lambda/settings/access_token/main.go
+    - zip -j build/access_token.zip build/lambda/settings/access_token/bootstrap
+
+  build:lambdas:settings:invoice_sync_enabled:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/settings/is_invoice_sync_enabled/bootstrap cmd/lambda/settings/is_invoice_sync_enabled/main.go
+    - zip -j build/is_invoice_sync_enabled.zip build/lambda/settings/is_invoice_sync_enabled/bootstrap
+
+  build:lambdas:settings:lexoffice:api_key:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/settings/lexoffice/api_key/bootstrap cmd/lambda/settings/lexoffice/api_key/main.go
+    - zip -j build/lexoffice_api_key.zip build/lambda/settings/lexoffice/api_key/bootstrap
+
+  build:lambdas:settings:lexoffice:revoke:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/settings/lexoffice/revoke/bootstrap cmd/lambda/settings/lexoffice/revoke/main.go
+    - zip -j build/lexoffice_revoke.zip build/lambda/settings/lexoffice/revoke/bootstrap
+
+  build:lambdas:settings:settings_stream:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/settings/settings_stream/bootstrap cmd/lambda/settings/settings_stream/main.go
+    - zip -j build/settingsstream.zip build/lambda/settings/settings_stream/bootstrap
+
+  build:lambdas:settings:sync_tax_settings:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/settings/sync_tax_settings/bootstrap cmd/lambda/settings/sync_tax_settings/main.go
+    - zip -j build/sync_tax_settings.zip build/lambda/settings/sync_tax_settings/bootstrap
+
+  build:lambdas:settings:use_collection_contact:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/settings/use_collection_contact/bootstrap cmd/lambda/settings/use_collection_contact/main.go
+    - zip -j build/use_collection_contact.zip build/lambda/settings/use_collection_contact/bootstrap
+
+  build:lambdas:sqssync:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/sqssync/bootstrap cmd/lambda/sqssync/main.go
+    - zip -j build/sqssync.zip build/lambda/sqssync/bootstrap
+
+  build:lambdas:webhook:
+    - env GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -tags lambda.norpc -o build/lambda/webhook/bootstrap cmd/lambda/webhook/main.go
+    - zip -j build/webhook.zip build/lambda/webhook/bootstrap

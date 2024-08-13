@@ -1,0 +1,72 @@
+name: Unlocks terraform state
+
+on:
+  workflow_dispatch:
+    inputs:
+      lockID:
+        description: 'Terraform state lock ID'
+        required: true
+      stage:
+        description: 'Stage to unlock'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+concurrency:
+  group: "terraform"
+  cancel-in-progress: false
+
+jobs:
+  terraform-unlock-dev:
+    if: ${{ github.event.inputs.stage == 'dev' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION_DEV }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_DEV }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_DEV }}
+      tf_actions_working_dir: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+          -backend-config="bucket=ecwid-affiliate-link-${{ inputs.stage }}-tfstate" \
+          -backend-config="key=state/terraform.tfstate" \
+          -backend-config="region=${{ secrets.AWS_REGION_DEV }}" \
+          -backend-config="dynamodb_table=ecwid-affiliate-link-${{ inputs.stage }}-tfstate"
+      - name: Terraform Unlock
+        run: terraform force-unlock -force ${{ github.event.inputs.lockID }}
+        continue-on-error: false
+  
+  terraform-unlock-prod:
+    if: ${{ github.event.inputs.stage == 'prod' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      tf_actions_working_dir: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+          -backend-config="bucket=ecwid-affiliate-link-${{ inputs.stage }}-tfstate" \
+          -backend-config="key=state/terraform.tfstate" \
+          -backend-config="region=${{ secrets.AWS_REGION }}" \
+          -backend-config="dynamodb_table=ecwid-affiliate-link-${{ inputs.stage }}-tfstate"        
+      - name: Terraform Unlock
+        run: terraform force-unlock -force ${{ github.event.inputs.lockID }}
+        continue-on-error: false

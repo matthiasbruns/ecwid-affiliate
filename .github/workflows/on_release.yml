@@ -1,0 +1,128 @@
+name: Deploy Prod
+
+on:
+  release:
+    types: [ released ]
+
+concurrency:
+  group: "release-deploy"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/_test_build.yml
+    secrets: inherit
+
+  build-web:
+    uses: ./.github/workflows/_test_build_web.yml
+    with:
+      stage: prod
+    secrets: inherit
+
+  validate-terraform:
+    uses: ./.github/workflows/_terraform_validate_deploy.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      STAGE: prod
+      TF_APPLY: true
+    secrets: inherit
+
+  deploy:
+    name: Deploy
+    environment: prod
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - build-web
+      - validate-terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download web-build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: web-build
+          path: web/build
+
+      - name: Download go-build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: go-build
+          path: build
+
+      - name: cdk synth
+        uses: youyo/aws-cdk-github-actions@v2
+        with:
+          cdk_subcommand: 'synth'
+          actions_comment: true
+          working_dir: 'cdk'
+        env:
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGE: prod
+
+      - name: cdk diff
+        uses: youyo/aws-cdk-github-actions@v2
+        with:
+          cdk_subcommand: 'diff'
+          actions_comment: true
+          working_dir: 'cdk'
+        env:
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGE: prod
+
+      - name: cdk deploy
+        uses: youyo/aws-cdk-github-actions@v2
+        with:
+          cdk_subcommand: 'deploy'
+          actions_comment: true
+          working_dir: 'cdk'
+          cdk_args: '--require-approval never'
+        env:
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAGE: prod
+
+      - name: Create Sentry release
+        uses: getsentry/action-release@v1
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        with:
+          environment: prod
+          version: ${{ github.event.release.tag_name }}
+
+      - run: npm ci
+        working-directory: ./web
+
+      - name: Upload Sentry sourcemaps
+        run: npm run sentry:sourcemaps
+        working-directory:
+          web
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN_WEB }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+
+  clear-cache:
+    needs: "deploy"
+    name: Invalidate CloudFront
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
