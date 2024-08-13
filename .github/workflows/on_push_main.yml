@@ -33,11 +33,8 @@ jobs:
     name: deploy
     runs-on: ubuntu-latest
     environment: dev
-    strategy:
-      matrix:
-        region: [ "eu-central-1" ]
     env:
-      AWS_REGION: ${{ matrix.region }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     needs:
@@ -66,7 +63,7 @@ jobs:
           actions_comment: true
           working_dir: 'cdk'
         env:
-          AWS_DEFAULT_REGION: ${{ matrix.region }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STAGE: dev
 
@@ -77,7 +74,7 @@ jobs:
           actions_comment: true
           working_dir: 'cdk'
         env:
-          AWS_DEFAULT_REGION: ${{ matrix.region }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STAGE: dev
 
@@ -89,7 +86,7 @@ jobs:
           working_dir: 'cdk'
           cdk_args: '--require-approval never'
         env:
-          AWS_DEFAULT_REGION: ${{ matrix.region }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STAGE: dev
 
@@ -101,7 +98,7 @@ jobs:
       matrix:
         region: [ "eu-central-1" ]
     env:
-      AWS_REGION: ${{ matrix.region }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
 
     steps:
       - name: Configure AWS Credentials
@@ -109,7 +106,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ matrix.region }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Invalidate CloudFront
         run: |
