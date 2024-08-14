@@ -21,9 +21,7 @@ jobs:
 
   validate-terraform:
     uses: ./.github/workflows/_terraform_validate_deploy.yml
-    permissions:
-      contents: read
-      packages: write
+    permissions: write-all
     with:
       STAGE: prod
       TF_APPLY: true
