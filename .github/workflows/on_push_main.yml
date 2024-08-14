@@ -93,6 +93,7 @@ jobs:
   clear-cache:
     needs: "deploy"
     name: Invalidate CloudFront
+    environment: dev
     runs-on: ubuntu-latest
     strategy:
       matrix:
